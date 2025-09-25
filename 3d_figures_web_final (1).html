@@ -1,0 +1,159 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Фигуры с управлением</title>
+    <style>
+        body { font-family: Arial; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        canvas { border: 1px solid #ccc; background: white; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+        .controls input, .controls select { width: 100px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h2>3D Фигуры с управлением</h2>
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <div class="controls">
+        <button onclick="alpha -= step; draw()">←</button>
+        <button onclick="alpha += step; draw()">→</button>
+        <button onclick="beta += step; draw()">↑</button>
+        <button onclick="beta -= step; draw()">↓</button>
+        <button onclick="zk += zh; updateZk(); draw()">Z+</button>
+        <button onclick="zk -= zh; updateZk(); draw()">Z-</button>
+        Альфа: <input type="text" id="alphaVal" readonly>
+        Бета: <input type="text" id="betaVal" readonly>
+        Zk: <input type="text" id="zkVal" readonly>
+        <select id="shapeSelect" onchange="changeShape(this.value)">
+            <option value="cube">Куб</option>
+            <option value="pyramid">Пирамида</option>
+            <option value="triangle_prism">Треугольная призма</option>
+            <option value="hex_prism">Шестиугольная призма</option>
+        </select>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let alpha = -70;
+        let beta = -70;
+        let zk = 1200;
+        const zrr = 500;
+        let zpl = zk - zrr;
+        const zh = 20;
+        const step = 10;
+        const mp = 350;
+        const cx = 300;
+        const cy = 300;
+
+        let shape = "cube";
+
+        const shapes = {
+            cube: {
+                points: [[0,0,0], [1,0,0], [1,1,0], [0,1,0], [0,1,1], [1,1,1], [1,0,1], [0,0,1]],
+                edges: [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,7],[1,6],[2,5],[3,4]]
+            },
+            pyramid: {
+                points: [[0,0,1], [1,0,0], [1,1,0], [0,1,0], [0.5,0.5,1.5]],
+                edges: [[0,1],[1,2],[2,3],[3,0],[0,4],[1,4],[2,4],[3,4]]
+            },
+            triangle_prism: {
+                points: [[0,0,0],[1,0,0],[0.5,1,0],[0,0,1],[1,0,1],[0.5,1,1]],
+                edges: [[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[0,3],[1,4],[2,5]]
+            },
+            hex_prism: {
+                points: (() => {
+                    let pts = [], r = 1;
+                    for (let i = 0; i < 6; i++) {
+                        let angle = Math.PI / 3 * i;
+                        pts.push([Math.cos(angle), Math.sin(angle), 0]);
+                    }
+                    for (let i = 0; i < 6; i++) {
+                        let angle = Math.PI / 3 * i;
+                        pts.push([Math.cos(angle), Math.sin(angle), 1]);
+                    }
+                    return pts;
+                })(),
+                edges: (() => {
+                    let e = [];
+                    for (let i = 0; i < 6; i++) {
+                        e.push([i, (i+1)%6]);
+                        e.push([i+6, (i+1)%6 + 6]);
+                        e.push([i, i+6]);
+                    }
+                    return e;
+                })()
+            }
+        };
+
+        const os = [[1,0,0], [0,1,0], [0,0,1]];
+        const labels = ['x', 'y', 'z'];
+
+        function rotateAndProject(x, y, z) {
+            const aRad = alpha * Math.PI / 180;
+            const bRad = beta * Math.PI / 180;
+
+            let xx = x * Math.cos(aRad) - y * Math.sin(aRad);
+            let yy = x * Math.sin(aRad) * Math.cos(bRad) + y * Math.cos(aRad) * Math.cos(bRad) - z * Math.sin(bRad);
+            let zz = x * Math.sin(aRad) * Math.sin(bRad) + y * Math.cos(aRad) * Math.sin(bRad) + z * Math.cos(bRad);
+
+            const factor = (zk - zpl) / (zk - zz);
+            xx *= factor;
+            yy *= factor;
+
+            return [cx + xx * mp, cy - yy * mp];
+        }
+
+        function drawLine(p1, p2, color='blue') {
+            ctx.beginPath();
+            ctx.moveTo(...p1);
+            ctx.lineTo(...p2);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawShape() {
+            const pts = shapes[shape].points.map(p => rotateAndProject(...p));
+            shapes[shape].edges.forEach(([i, j]) => drawLine(pts[i], pts[j]));
+        }
+
+        function drawAxes() {
+            const origin = [40, 2 * cy - 40];
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(...origin, 2, 0, 2 * Math.PI);
+            ctx.fill();
+
+            os.forEach((axis, i) => {
+                const [x, y] = rotateAndProject(...axis);
+                const dx = 40 + ((x - cx) / mp) * 40;
+                const dy = (2 * cy - 40) - ((cy - y) / mp) * 40;
+                drawLine(origin, [dx, dy], 'red');
+                ctx.fillText(labels[i], dx, dy);
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawShape();
+            drawAxes();
+            document.getElementById("alphaVal").value = alpha;
+            document.getElementById("betaVal").value = beta;
+            document.getElementById("zkVal").value = zk;
+        }
+
+        function updateZk() {
+            zpl = zk - zrr;
+        }
+
+        function changeShape(val) {
+            shape = val;
+            draw();
+        }
+
+        draw();
+    </script>
+</body>
+</html>
